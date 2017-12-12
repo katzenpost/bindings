@@ -2,9 +2,9 @@ package minclient
 
 import (
 	"encoding/hex"
-	"errors"
 
 	"github.com/katzenpost/core/crypto/rand"
+	"github.com/katzenpost/core/log"
 	"github.com/katzenpost/core/sphinx"
 	"github.com/katzenpost/core/sphinx/constants"
 	"github.com/katzenpost/core/utils"
@@ -16,24 +16,23 @@ import (
 type Session struct {
 	client   *minclient.Client
 	queue    chan string
+	log      *log.Backend
+
 	// TODO: we'll need to add persistency to the surb keys at some point
 	surbKeys map[[constants.SURBIDLength]byte][]byte
 }
 
 // NewSession stablishes a session with provider using key
-func NewSession(user string, provider string, key Key) (Session, error) {
+func (client Client) NewSession(user string, provider string, key Key) (Session, error) {
 	var err error
 	var session Session
-	if pkiClient == nil {
-		return session, errors.New("PKI is not configured")
-	}
 
 	clientCfg := &minclient.ClientConfig{
 		User:        user,
 		Provider:    provider,
 		LinkKey:     key.priv,
-		LogBackend:  clientLog,
-		PKIClient:   pkiClient,
+		LogBackend:  client.log,
+		PKIClient:   client.pki,
 		OnConnFn:    session.onConn,
 		OnMessageFn: session.onMessage,
 		OnACKFn: session.onACK,
@@ -42,6 +41,7 @@ func NewSession(user string, provider string, key Key) (Session, error) {
 	session.queue = make(chan string, 100)
 	session.surbKeys = make(map[[constants.SURBIDLength]byte][]byte)
 	session.client, err = minclient.New(clientCfg)
+	session.log = client.log
 	return session, err
 }
 
@@ -75,7 +75,7 @@ func (s *Session) GetMessage() string {
 }
 
 func (s *Session) onMessage(b []byte) error {
-	lm := clientLog.GetLogger("callbacks:onMessage")
+	lm := s.log.GetLogger("callbacks:onMessage")
 	lm.Noticef("Received Message: %v", len(b))
 	lm.Noticef("====> %v", string(b))
 
@@ -84,7 +84,7 @@ func (s *Session) onMessage(b []byte) error {
 }
 
 func (s *Session) onACK(id *[constants.SURBIDLength]byte, b []byte) error {
-	lm := clientLog.GetLogger("callbacks:onACK")
+	lm := s.log.GetLogger("callbacks:onACK")
 	lm.Noticef("Received SURB-ACK: %v", len(b))
 	lm.Noticef("SURB-ID: %v", hex.EncodeToString(id[:]))
 
@@ -110,6 +110,6 @@ func (s *Session) onACK(id *[constants.SURBIDLength]byte, b []byte) error {
 }
 
 func (s *Session) onConn(isConnected bool) {
-	lm := clientLog.GetLogger("callbacks:onConn")
+	lm := s.log.GetLogger("callbacks:onConn")
 	lm.Noticef("Peer connection status changed: %v", isConnected)
 }
