@@ -4,6 +4,7 @@ import (
 	"encoding/hex"
 	"errors"
 
+	"github.com/katzenpost/core/crypto/rand"
 	"github.com/katzenpost/core/sphinx"
 	"github.com/katzenpost/core/sphinx/constants"
 	"github.com/katzenpost/core/utils"
@@ -38,15 +39,7 @@ func NewSession(user string, provider string, key Key) (Session, error) {
 		OnMessageFn: func(b []byte) error {
 			// TODO: we need to handle incomming messages
 			lm.Noticef("Received Message: %v", len(b))
-
-			blk, pk, err := block.DecryptBlock(b, key.priv)
-			if err != nil {
-				lm.Errorf("Failed to decrypt block: %v", err)
-				return nil
-			}
-
-			lm.Noticef("Sender Public Key: %v", pk)
-			lm.Noticef("Message payload: %v", hex.Dump(blk.Payload))
+			lm.Noticef("====> %v", string(b))
 
 			return nil
 		},
@@ -88,7 +81,16 @@ func (s Session) Shutdown() {
 }
 
 // SendMessage into the mix network
-func (s Session) SendMessage(msg string) error {
-	// TODO
-	return nil
+func (s Session) SendMessage(recipient, provider, msg string) error {
+	// TODO: deal with ACKs
+	surbID := [constants.SURBIDLength]byte{}
+	_, err := rand.Reader.Read(surbID[:])
+	if err != nil {
+		return err
+	}
+
+	chunk := [block.BlockCiphertextLength]byte{}
+	copy(chunk[:], []byte(msg))
+	_, _, err = s.client.SendCiphertext(recipient, provider, &surbID, chunk[:])
+	return err
 }
