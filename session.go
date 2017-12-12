@@ -18,12 +18,14 @@ var surbKeys = make(map[[constants.SURBIDLength]byte][]byte)
 // Session holds the client session
 type Session struct {
 	client *minclient.Client
+	queue  chan string
 }
 
 // NewSession stablishes a session with provider using key
 func NewSession(user string, provider string, key Key) (Session, error) {
+	var session Session
 	if pkiClient == nil {
-		return Session{}, errors.New("PKI is not configured")
+		return session, errors.New("PKI is not configured")
 	}
 	lm := clientLog.GetLogger("callbacks:main")
 
@@ -36,13 +38,7 @@ func NewSession(user string, provider string, key Key) (Session, error) {
 		OnConnFn:    func(isConnected bool) {
 			lm.Noticef("Peer connection status changed: %v", isConnected)
 		},
-		OnMessageFn: func(b []byte) error {
-			// TODO: we need to handle incomming messages
-			lm.Noticef("Received Message: %v", len(b))
-			lm.Noticef("====> %v", string(b))
-
-			return nil
-		},
+		OnMessageFn: session.onMessage,
 		OnACKFn: func(id *[constants.SURBIDLength]byte, b []byte) error {
 			lm.Noticef("Received SURB-ACK: %v", len(b))
 			lm.Noticef("SURB-ID: %v", hex.EncodeToString(id[:]))
@@ -69,8 +65,8 @@ func NewSession(user string, provider string, key Key) (Session, error) {
 		},
 	}
 
-	var session Session
 	var err error
+	session.queue = make(chan string, 100)
 	session.client, err = minclient.New(clientCfg)
 	return session, err
 }
@@ -93,4 +89,19 @@ func (s Session) SendMessage(recipient, provider, msg string) error {
 	copy(chunk[:], []byte(msg))
 	_, _, err = s.client.SendCiphertext(recipient, provider, &surbID, chunk[:])
 	return err
+}
+
+// GetMessage blocks until there is a message in the inbox
+func (s *Session) GetMessage() string {
+	return <-s.queue
+}
+
+func (s *Session) onMessage(b []byte) error {
+	// TODO: we need to handle incomming messages
+	lm := clientLog.GetLogger("callbacks:onMessage")
+	lm.Noticef("Received Message: %v", len(b))
+	lm.Noticef("====> %v", string(b))
+
+	s.queue <- string(b)
+	return nil
 }
