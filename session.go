@@ -12,22 +12,21 @@ import (
 	"github.com/katzenpost/minclient/block"
 )
 
-// TODO: we might need that being long lived
-var surbKeys = make(map[[constants.SURBIDLength]byte][]byte)
-
 // Session holds the client session
 type Session struct {
-	client *minclient.Client
-	queue  chan string
+	client   *minclient.Client
+	queue    chan string
+	// TODO: we'll need to add persistency to the surb keys at some point
+	surbKeys map[[constants.SURBIDLength]byte][]byte
 }
 
 // NewSession stablishes a session with provider using key
 func NewSession(user string, provider string, key Key) (Session, error) {
+	var err error
 	var session Session
 	if pkiClient == nil {
 		return session, errors.New("PKI is not configured")
 	}
-	lm := clientLog.GetLogger("callbacks:main")
 
 	clientCfg := &minclient.ClientConfig{
 		User:        user,
@@ -35,38 +34,13 @@ func NewSession(user string, provider string, key Key) (Session, error) {
 		LinkKey:     key.priv,
 		LogBackend:  clientLog,
 		PKIClient:   pkiClient,
-		OnConnFn:    func(isConnected bool) {
-			lm.Noticef("Peer connection status changed: %v", isConnected)
-		},
+		OnConnFn:    session.onConn,
 		OnMessageFn: session.onMessage,
-		OnACKFn: func(id *[constants.SURBIDLength]byte, b []byte) error {
-			lm.Noticef("Received SURB-ACK: %v", len(b))
-			lm.Noticef("SURB-ID: %v", hex.EncodeToString(id[:]))
-
-			// surbKeys should have a lock in production code, but lazy.
-			k, ok := surbKeys[*id]
-			if !ok {
-				lm.Errorf("Failed to find SURB SPRP key")
-				return nil
-			}
-
-			payload, err := sphinx.DecryptSURBPayload(b, k)
-			if err != nil {
-				lm.Errorf("Failed to decrypt SURB: %v", err)
-				return nil
-			}
-			if utils.CtIsZero(payload) {
-				lm.Noticef("SURB Payload: %v bytes of 0x00", len(payload))
-			} else {
-				lm.Noticef("SURB Payload: %v", hex.Dump(payload))
-			}
-
-			return nil
-		},
+		OnACKFn: session.onACK,
 	}
 
-	var err error
 	session.queue = make(chan string, 100)
+	session.surbKeys = make(map[[constants.SURBIDLength]byte][]byte)
 	session.client, err = minclient.New(clientCfg)
 	return session, err
 }
@@ -78,7 +52,6 @@ func (s Session) Shutdown() {
 
 // SendMessage into the mix network
 func (s Session) SendMessage(recipient, provider, msg string) error {
-	// TODO: deal with ACKs
 	surbID := [constants.SURBIDLength]byte{}
 	_, err := rand.Reader.Read(surbID[:])
 	if err != nil {
@@ -87,8 +60,13 @@ func (s Session) SendMessage(recipient, provider, msg string) error {
 
 	chunk := [block.BlockCiphertextLength]byte{}
 	copy(chunk[:], []byte(msg))
-	_, _, err = s.client.SendCiphertext(recipient, provider, &surbID, chunk[:])
-	return err
+	surbKey, _, err := s.client.SendCiphertext(recipient, provider, &surbID, chunk[:])
+	if err != nil {
+		return err
+	}
+
+	s.surbKeys[surbID] = surbKey
+	return nil
 }
 
 // GetMessage blocks until there is a message in the inbox
@@ -97,11 +75,41 @@ func (s *Session) GetMessage() string {
 }
 
 func (s *Session) onMessage(b []byte) error {
-	// TODO: we need to handle incomming messages
 	lm := clientLog.GetLogger("callbacks:onMessage")
 	lm.Noticef("Received Message: %v", len(b))
 	lm.Noticef("====> %v", string(b))
 
 	s.queue <- string(b)
 	return nil
+}
+
+func (s *Session) onACK(id *[constants.SURBIDLength]byte, b []byte) error {
+	lm := clientLog.GetLogger("callbacks:onACK")
+	lm.Noticef("Received SURB-ACK: %v", len(b))
+	lm.Noticef("SURB-ID: %v", hex.EncodeToString(id[:]))
+
+	// surbKeys should have a lock in production code, but lazy.
+	k, ok := s.surbKeys[*id]
+	if !ok {
+		lm.Errorf("Failed to find SURB SPRP key")
+		return nil
+	}
+
+	payload, err := sphinx.DecryptSURBPayload(b, k)
+	if err != nil {
+		lm.Errorf("Failed to decrypt SURB: %v", err)
+		return nil
+	}
+	if utils.CtIsZero(payload) {
+		lm.Noticef("SURB Payload: %v bytes of 0x00", len(payload))
+	} else {
+		lm.Noticef("SURB Payload: %v", hex.Dump(payload))
+	}
+
+	return nil
+}
+
+func (s *Session) onConn(isConnected bool) {
+	lm := clientLog.GetLogger("callbacks:onConn")
+	lm.Noticef("Peer connection status changed: %v", isConnected)
 }
