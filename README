@@ -1,0 +1,2 @@
+You need to install gopy:
+  $ go get github.com/go-python/gopy
