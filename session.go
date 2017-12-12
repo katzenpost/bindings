@@ -14,9 +14,9 @@ import (
 
 // Session holds the client session
 type Session struct {
-	client   *minclient.Client
-	queue    chan string
-	log      *log.Backend
+	client *minclient.Client
+	queue  chan string
+	log    *log.Backend
 
 	// TODO: we'll need to add persistency to the surb keys at some point
 	surbKeys map[[constants.SURBIDLength]byte][]byte
@@ -35,7 +35,7 @@ func (client Client) NewSession(user string, provider string, key Key) (Session,
 		PKIClient:   client.pki,
 		OnConnFn:    session.onConn,
 		OnMessageFn: session.onMessage,
-		OnACKFn: session.onACK,
+		OnACKFn:     session.onACK,
 	}
 
 	session.queue = make(chan string, 100)
@@ -47,7 +47,7 @@ func (client Client) NewSession(user string, provider string, key Key) (Session,
 
 // Shutdown the session
 func (s Session) Shutdown() {
-    s.client.Shutdown()
+	s.client.Shutdown()
 }
 
 // SendMessage into the mix network

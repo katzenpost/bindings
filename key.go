@@ -10,8 +10,8 @@ import (
 // Key keeps the key public and private data
 type Key struct {
 	Private string
-	Public string
-	priv *ecdh.PrivateKey
+	Public  string
+	priv    *ecdh.PrivateKey
 }
 
 // GenKey creates a new ecdh key
@@ -20,14 +20,14 @@ func GenKey() (Key, error) {
 	if err != nil {
 		return Key{}, err
 	}
-    return buildKey(key), nil
+	return buildKey(key), nil
 }
 
 // StringToKey builds a Key from a string
 func StringToKey(keyStr string) (Key, error) {
-    var key ecdh.PrivateKey
+	var key ecdh.PrivateKey
 
-    keyBytes, err := hex.DecodeString(keyStr)
+	keyBytes, err := hex.DecodeString(keyStr)
 	if err != nil {
 		return Key{}, err
 	}
@@ -37,13 +37,13 @@ func StringToKey(keyStr string) (Key, error) {
 		return Key{}, err
 	}
 
-    return buildKey(&key), nil
+	return buildKey(&key), nil
 }
 
 func buildKey(key *ecdh.PrivateKey) Key {
 	return Key{
 		Private: hex.EncodeToString(key.Bytes()),
-		Public: key.PublicKey().String(),
-		priv: key,
+		Public:  key.PublicKey().String(),
+		priv:    key,
 	}
 }
