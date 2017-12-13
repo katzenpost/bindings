@@ -1,22 +1,23 @@
 package minclient
 
 import (
+	"fmt"
 	"encoding/hex"
 
 	"github.com/katzenpost/core/crypto/rand"
-	"github.com/katzenpost/core/log"
 	"github.com/katzenpost/core/sphinx"
 	"github.com/katzenpost/core/sphinx/constants"
 	"github.com/katzenpost/core/utils"
 	"github.com/katzenpost/minclient"
 	"github.com/katzenpost/minclient/block"
+	"github.com/op/go-logging"
 )
 
 // Session holds the client session
 type Session struct {
 	client *minclient.Client
 	queue  chan string
-	log    *log.Backend
+	log    *logging.Logger
 
 	// TODO: we'll need to add persistency to the surb keys at some point
 	surbKeys map[[constants.SURBIDLength]byte][]byte
@@ -34,6 +35,7 @@ func (client Client) NewSession(user string, provider string, key Key) (Session,
 		LogBackend:  client.log,
 		PKIClient:   client.pki,
 		OnConnFn:    session.onConn,
+		OnEmptyFn:   session.onEmpty,
 		OnMessageFn: session.onMessage,
 		OnACKFn:     session.onACK,
 	}
@@ -41,7 +43,7 @@ func (client Client) NewSession(user string, provider string, key Key) (Session,
 	session.queue = make(chan string, 100)
 	session.surbKeys = make(map[[constants.SURBIDLength]byte][]byte)
 	session.client, err = minclient.New(clientCfg)
-	session.log = client.log
+	session.log = client.log.GetLogger(fmt.Sprintf("callbacks:%s@%s", user, provider))
 	return session, err
 }
 
@@ -75,41 +77,43 @@ func (s *Session) GetMessage() string {
 }
 
 func (s *Session) onMessage(b []byte) error {
-	lm := s.log.GetLogger("callbacks:onMessage")
-	lm.Noticef("Received Message: %v", len(b))
-	lm.Noticef("====> %v", string(b))
+	s.log.Noticef("Received Message: %v", len(b))
+	s.log.Noticef("====> %v", string(b))
 
 	s.queue <- string(b)
 	return nil
 }
 
 func (s *Session) onACK(id *[constants.SURBIDLength]byte, b []byte) error {
-	lm := s.log.GetLogger("callbacks:onACK")
-	lm.Noticef("Received SURB-ACK: %v", len(b))
-	lm.Noticef("SURB-ID: %v", hex.EncodeToString(id[:]))
+	s.log.Noticef("Received SURB-ACK: %v", len(b))
+	s.log.Noticef("SURB-ID: %v", hex.EncodeToString(id[:]))
 
 	// surbKeys should have a lock in production code, but lazy.
 	k, ok := s.surbKeys[*id]
 	if !ok {
-		lm.Errorf("Failed to find SURB SPRP key")
+		s.log.Errorf("Failed to find SURB SPRP key")
 		return nil
 	}
 
 	payload, err := sphinx.DecryptSURBPayload(b, k)
 	if err != nil {
-		lm.Errorf("Failed to decrypt SURB: %v", err)
+		s.log.Errorf("Failed to decrypt SURB: %v", err)
 		return nil
 	}
 	if utils.CtIsZero(payload) {
-		lm.Noticef("SURB Payload: %v bytes of 0x00", len(payload))
+		s.log.Noticef("SURB Payload: %v bytes of 0x00", len(payload))
 	} else {
-		lm.Noticef("SURB Payload: %v", hex.Dump(payload))
+		s.log.Noticef("SURB Payload: %v", hex.Dump(payload))
 	}
 
 	return nil
 }
 
 func (s *Session) onConn(isConnected bool) {
-	lm := s.log.GetLogger("callbacks:onConn")
-	lm.Noticef("Peer connection status changed: %v", isConnected)
+	s.log.Noticef("Peer connection status changed: %v", isConnected)
+}
+
+func (s *Session) onEmpty() error {
+	s.log.Noticef("Providers queue is empty")
+	return nil
 }
