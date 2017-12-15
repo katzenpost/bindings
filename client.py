@@ -40,4 +40,7 @@ while not sent:
 print("Message sent")
 
 while 1:
-    print(session.GetMessage())
+    try:
+        print(session.GetMessage(1))
+    except RuntimeError:
+        pass
