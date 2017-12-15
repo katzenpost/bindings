@@ -28,15 +28,9 @@ pkiKey = "900895721381C0756D28954524BB1D090F54C8DD9295F84B1D8A93F1E3C17AD8"
 client = minclient.NewClient(pkiAddr, pkiKey, minclient.LogConfig())
 key = minclient.StringToKey(keyStr)
 session = client.NewSession(name, provider, key)
+session.WaitToConnect()
 
-sent = False
-while not sent:
-    try:
-        session.SendMessage("bob", "panoramix.org", "hello bob!!!")
-        time.sleep(1)
-        sent = True
-    except RuntimeError:
-        pass
+session.SendMessage("bob", "panoramix.org", "hello bob!!!")
 print("Message sent")
 
 while 1:
