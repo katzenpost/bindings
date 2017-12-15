@@ -61,7 +61,7 @@ func (client Client) NewSession(user string, provider string, key Key) (Session,
 	}
 
 	session.queue = make(chan string, 100)
-	session.connected = make(chan bool)
+	session.connected = make(chan bool, 1)
 	session.surbKeys = make(map[[constants.SURBIDLength]byte][]byte)
 	session.client, err = minclient.New(clientCfg)
 	session.log = client.log.GetLogger(fmt.Sprintf("callbacks:%s@%s", user, provider))
