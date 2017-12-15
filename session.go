@@ -18,8 +18,10 @@
 package minclient
 
 import (
-	"fmt"
 	"encoding/hex"
+	"errors"
+	"fmt"
+	"time"
 
 	"github.com/katzenpost/core/crypto/rand"
 	"github.com/katzenpost/core/sphinx"
@@ -89,8 +91,17 @@ func (s Session) SendMessage(recipient, provider, msg string) error {
 }
 
 // GetMessage blocks until there is a message in the inbox
-func (s *Session) GetMessage() string {
-	return <-s.queue
+func (s *Session) GetMessage(timeout int) (string, error) {
+	if timeout == 0 {
+		return <-s.queue, nil
+	}
+
+	select {
+	case msg := <-s.queue:
+		return msg, nil
+	case <-time.After(time.Second * timeout):
+		return "", errors.New("Timeout")
+	}
 }
 
 func (s *Session) onMessage(b []byte) error {
