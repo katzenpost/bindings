@@ -41,7 +41,7 @@ type Session struct {
 }
 
 // NewSession stablishes a session with provider using key
-func (client Client) NewSession(user string, provider string, key Key) (Session, error) {
+func (client Client) NewSession(user string, provider string, key *Key) (*Session, error) {
 	var err error
 	var session Session
 
@@ -61,7 +61,7 @@ func (client Client) NewSession(user string, provider string, key Key) (Session,
 	session.surbKeys = make(map[[constants.SURBIDLength]byte][]byte)
 	session.client, err = minclient.New(clientCfg)
 	session.log = client.log.GetLogger(fmt.Sprintf("callbacks:%s@%s", user, provider))
-	return session, err
+	return &session, err
 }
 
 // Shutdown the session

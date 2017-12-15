@@ -39,13 +39,13 @@ type LogConfig struct {
 }
 
 // NewClient configures the pki to be used
-func NewClient(pkiAddress, pkiKey string, logConfig LogConfig) (Client, error) {
+func NewClient(pkiAddress, pkiKey string, logConfig *LogConfig) (*Client, error) {
 	var client Client
 
 	var pubKey eddsa.PublicKey
 	err := pubKey.FromString(pkiKey)
 	if err != nil {
-		return client, err
+		return &client, err
 	}
 
 	logLevel := "NOTICE"
@@ -54,7 +54,7 @@ func NewClient(pkiAddress, pkiKey string, logConfig LogConfig) (Client, error) {
 	}
 	client.log, err = log.New(logConfig.File, logLevel, !logConfig.Enabled)
 	if err != nil {
-		return client, err
+		return &client, err
 	}
 
 	pkiCfg := npki.Config{
@@ -63,5 +63,5 @@ func NewClient(pkiAddress, pkiKey string, logConfig LogConfig) (Client, error) {
 		PublicKey:  &pubKey,
 	}
 	client.pki, err = npki.New(&pkiCfg)
-	return client, err
+	return &client, err
 }
