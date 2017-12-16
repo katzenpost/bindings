@@ -45,12 +45,11 @@ func (s *StorageStub) PutBlock(*[block.MessageIDLength]byte, []byte) error {
 
 // Session holds the client session
 type Session struct {
-	client          *client.Client
-	log             *logging.Logger
-	clientCfg       *client.Config
-	sessionCfg      *client.SessionConfig
-	session         *client.Session
-	ingressMsgQueue chan string
+	client     *client.Client
+	log        *logging.Logger
+	clientCfg  *client.Config
+	sessionCfg *client.SessionConfig
+	session    *client.Session
 }
 
 // NewSession stablishes a session with provider using key
@@ -69,32 +68,8 @@ func (c *KatzenClient) NewSession(user string, provider string, linkPrivKey *Key
 		return session, err
 	}
 	session.client = gClient
-	session.ingressMsgQueue = make(chan string, 100)
 	session.log = c.log.GetLogger(fmt.Sprintf("session_%s@%s", user, provider))
 	return session, err
-}
-
-// ReceivedMessage is used to receive a message.
-// This is a method on the MessageConsumer interface
-// which is defined in the client library.
-// XXX fix me
-func (s *Session) ReceivedMessage(senderPubKey *ecdh.PublicKey, message []byte) {
-	s.log.Debug("ReceivedMessage")
-	s.ingressMsgQueue <- string(message)
-}
-
-// GetMessage blocks until there is a message in the inbox
-func (s *Session) GetMessage() string {
-	s.log.Debug("GetMessage")
-	return <-s.ingressMsgQueue
-}
-
-// ReceivedACK is used to receive a signal that a message was received by
-// the recipient Provider. This is a method on the MessageConsumer interface
-// which is defined in the client library.
-// XXX fix me
-func (s *Session) ReceivedACK(messageID *[block.MessageIDLength]byte, message []byte) {
-	s.log.Debug("ReceivedACK")
 }
 
 // Get returns the identity public key for a given identity.
@@ -107,13 +82,13 @@ func (s *Session) Get(identity string) (*ecdh.PublicKey, error) {
 }
 
 // Connect connects the client to the Provider
-func (s *Session) Connect(identityPrivKey *Key) error {
+func (s *Session) Connect(identityPrivKey *Key, messageConsumer client.MessageConsumer) error {
 	sessionCfg := client.SessionConfig{
 		User:             s.clientCfg.User,
 		Provider:         s.clientCfg.Provider,
 		IdentityPrivKey:  identityPrivKey.priv,
 		LinkPrivKey:      s.clientCfg.LinkKey,
-		MessageConsumer:  s,
+		MessageConsumer:  messageConsumer,
 		Storage:          new(StorageStub),
 		UserKeyDiscovery: s,
 	}
