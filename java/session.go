@@ -110,8 +110,8 @@ func (s *Session) Shutdown() {
 }
 
 // Send into the mix network
-func (s *Session) Send(recipient, provider string, msg []byte) error {
-	messageID, err := s.session.Send(recipient, provider, msg)
+func (s *Session) Send(recipient, provider string, msg string) error {
+	messageID, err := s.session.Send(recipient, provider, []byte(msg))
 	if err != nil {
 		return err
 	}
@@ -120,6 +120,6 @@ func (s *Session) Send(recipient, provider string, msg []byte) error {
 }
 
 // SendUnreliable into the mix network
-func (s *Session) SendUnreliable(recipient, provider string, msg *[]byte) error {
-	return s.session.SendUnreliable(recipient, provider, *msg)
+func (s *Session) SendUnreliable(recipient, provider string, msg string) error {
+	return s.session.SendUnreliable(recipient, provider, []byte(msg))
 }
