@@ -39,7 +39,7 @@ type LogConfig struct {
 }
 
 // NewClient configures the pki to be used
-func New(pkiAddress, pkiKey string, logConfig *LogConfig) (*KatzenClient, error) {
+func NewKatzenClient(pkiAddress, pkiKey string, logConfig *LogConfig) (*KatzenClient, error) {
 	var pubKey eddsa.PublicKey
 	err := pubKey.FromString(pkiKey)
 	if err != nil {
