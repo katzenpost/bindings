@@ -39,7 +39,7 @@ type LogConfig struct {
 }
 
 // NewClient configures the pki to be used
-func NewClient(pkiAddress, pkiKey string, logConfig LogConfig) (*Client, error) {
+func NewClient(pkiAddress, pkiKey string, logConfig *LogConfig) (*Client, error) {
 	var pubKey eddsa.PublicKey
 	err := pubKey.FromString(pkiKey)
 	if err != nil {
