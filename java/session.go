@@ -17,7 +17,6 @@
 package client
 
 import (
-	"encoding/hex"
 	"errors"
 	"fmt"
 
@@ -104,12 +103,8 @@ func (s *Session) Shutdown() {
 }
 
 // Send into the mix network
-func (s *Session) Send(recipient, provider, msg string) error {
-	raw, err := hex.DecodeString(msg)
-	if err != nil {
-		return err
-	}
-	messageID, err := s.session.Send(recipient, provider, raw)
+func (s *Session) Send(recipient, provider string, msg []byte) error {
+	messageID, err := s.session.Send(recipient, provider, msg)
 	if err != nil {
 		return err
 	}
@@ -118,10 +113,6 @@ func (s *Session) Send(recipient, provider, msg string) error {
 }
 
 // SendUnreliable into the mix network
-func (s *Session) SendUnreliable(recipient, provider, msg string) error {
-	raw, err := hex.DecodeString(msg)
-	if err != nil {
-		return err
-	}
-	return s.session.SendUnreliable(recipient, provider, raw)
+func (s *Session) SendUnreliable(recipient, provider string, msg []byte) error {
+	return s.session.SendUnreliable(recipient, provider, msg)
 }
