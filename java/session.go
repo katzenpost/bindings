@@ -54,13 +54,13 @@ type Session struct {
 }
 
 // NewSession stablishes a session with provider using key
-func (c *KatzenClient) NewSession(user string, provider string, linkPrivKey *ecdh.PrivateKey) (*Session, error) {
+func (c *KatzenClient) NewSession(user string, provider string, linkPrivKey *Key) (*Session, error) {
 	var err error
 	session := new(Session)
 	clientCfg := &client.Config{
 		User:       user,
 		Provider:   provider,
-		LinkKey:    linkPrivKey,
+		LinkKey:    linkPrivKey.priv,
 		LogBackend: c.log,
 		PKIClient:  c.pki,
 	}
@@ -107,11 +107,11 @@ func (s *Session) Get(identity string) (*ecdh.PublicKey, error) {
 }
 
 // Connect connects the client to the Provider
-func (s *Session) Connect(identityPrivKey *ecdh.PrivateKey) error {
+func (s *Session) Connect(identityPrivKey *Key) error {
 	sessionCfg := client.SessionConfig{
 		User:             s.clientCfg.User,
 		Provider:         s.clientCfg.Provider,
-		IdentityPrivKey:  identityPrivKey,
+		IdentityPrivKey:  identityPrivKey.priv,
 		LinkPrivKey:      s.clientCfg.LinkKey,
 		MessageConsumer:  s,
 		Storage:          new(StorageStub),
