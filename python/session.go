@@ -20,7 +20,7 @@ import (
 	"encoding/hex"
 	"fmt"
 
-	"github.com/katzenpost/bindings/python/internal"
+	"github.com/katzenpost/bindings/python/fenced"
 	"github.com/katzenpost/client"
 	"github.com/op/go-logging"
 )
@@ -56,15 +56,15 @@ func (c Client) NewSession(user string, provider string, key Key) (Session, erro
 
 // Connect connects the client to the Provider
 func (s Session) Connect(identityKey Key) error {
-	consumer := internal.NewMessageConsumer(s.log)
-	userKeyDiscoveryStub := internal.UserKeyDiscoveryStub{}
+	consumer := fenced.NewMessageConsumer(s.log)
+	userKeyDiscoveryStub := fenced.UserKeyDiscoveryStub{}
 	sessionCfg := client.SessionConfig{
 		User:             s.clientCfg.User,
 		Provider:         s.clientCfg.Provider,
 		IdentityPrivKey:  identityKey.priv,
 		LinkPrivKey:      s.clientCfg.LinkKey,
 		MessageConsumer:  consumer,
-		Storage:          new(internal.StorageStub),
+		Storage:          new(fenced.StorageStub),
 		UserKeyDiscovery: userKeyDiscoveryStub,
 	}
 	s.sessionCfg = &sessionCfg
@@ -74,7 +74,7 @@ func (s Session) Connect(identityKey Key) error {
 }
 
 func (s Session) GetMessage() string {
-	return s.sessionCfg.MessageConsumer.(internal.MessageConsumer).GetMessage()
+	return s.sessionCfg.MessageConsumer.(fenced.MessageConsumer).GetMessage()
 }
 
 // Shutdown the session
