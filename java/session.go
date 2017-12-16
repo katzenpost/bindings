@@ -26,6 +26,13 @@ import (
 	"github.com/op/go-logging"
 )
 
+// MessageConsumer is an interface used for
+// processing received messages
+type MessageConsumer interface {
+	ReceivedMessage(senderPubKey *ecdh.PublicKey, message []byte)
+	ReceivedACK(messageID *[block.MessageIDLength]byte, message []byte)
+}
+
 // StorageStub implements the Storage interface
 // as defined in the client library.
 // XXX This should be replaced by something useful.
@@ -81,7 +88,7 @@ func (s *Session) Get(identity string) (*ecdh.PublicKey, error) {
 }
 
 // Connect connects the client to the Provider
-func (s *Session) Connect(identityPrivKey *Key, messageConsumer client.MessageConsumer) error {
+func (s *Session) Connect(identityPrivKey *Key, messageConsumer MessageConsumer) error {
 	sessionCfg := client.SessionConfig{
 		User:             s.clientCfg.User,
 		Provider:         s.clientCfg.Provider,
