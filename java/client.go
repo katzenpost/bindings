@@ -25,8 +25,8 @@ import (
 	cpki "github.com/katzenpost/core/pki"
 )
 
-// Client is katzenpost object
-type Client struct {
+// KatzenClient is katzenpost object
+type KatzenClient struct {
 	log *log.Backend
 	pki cpki.Client
 }
@@ -39,7 +39,7 @@ type LogConfig struct {
 }
 
 // NewClient configures the pki to be used
-func NewClient(pkiAddress, pkiKey string, logConfig *LogConfig) (*Client, error) {
+func New(pkiAddress, pkiKey string, logConfig *LogConfig) (*KatzenClient, error) {
 	var pubKey eddsa.PublicKey
 	err := pubKey.FromString(pkiKey)
 	if err != nil {
@@ -50,7 +50,7 @@ func NewClient(pkiAddress, pkiKey string, logConfig *LogConfig) (*Client, error)
 	if logConfig.Level != "" {
 		logLevel = logConfig.Level
 	}
-	client := new(Client)
+	client := new(KatzenClient)
 	client.log, err = log.New(logConfig.File, logLevel, !logConfig.Enabled)
 	if err != nil {
 		return nil, err

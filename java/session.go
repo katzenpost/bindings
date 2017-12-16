@@ -54,7 +54,7 @@ type Session struct {
 }
 
 // NewSession stablishes a session with provider using key
-func (c *Client) NewSession(user string, provider string, linkPrivKey *ecdh.PrivateKey) (*Session, error) {
+func (c *KatzenClient) NewSession(user string, provider string, linkPrivKey *ecdh.PrivateKey) (*Session, error) {
 	var err error
 	session := new(Session)
 	clientCfg := &client.Config{
