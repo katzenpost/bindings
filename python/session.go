@@ -84,7 +84,7 @@ func (s Session) ReceivedMessage(senderPubKey *ecdh.PublicKey, message []byte) {
 }
 
 // GetMessage blocks until there is a message in the inbox
-func (s *Session) GetMessage() string {
+func (s Session) GetMessage() string {
 	s.log.Debug("GetMessage")
 	return <-s.ingressMsgQueue
 }
