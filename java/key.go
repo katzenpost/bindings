@@ -18,7 +18,7 @@
 package client
 
 import (
-	"encoding/hex"
+	"encoding/base64"
 
 	"github.com/katzenpost/core/crypto/ecdh"
 	"github.com/katzenpost/core/crypto/rand"
@@ -41,10 +41,10 @@ func GenKey() (*Key, error) {
 }
 
 // StringToKey builds a Key from a string
-func KeyFromString(keyStr string) (*Key, error) {
+func KeyFromBase64(keyStr string) (*Key, error) {
 	var key ecdh.PrivateKey
 
-	keyBytes, err := hex.DecodeString(keyStr)
+	keyBytes, err := base64.StdEncoding.DecodeString(keyStr)
 	if err != nil {
 		return &Key{}, err
 	}
