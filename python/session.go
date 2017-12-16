@@ -18,39 +18,20 @@ package client
 
 import (
 	"encoding/hex"
-	"errors"
 	"fmt"
 
+	"github.com/katzenpost/bindings/python/internal"
 	"github.com/katzenpost/client"
-	"github.com/katzenpost/core/crypto/ecdh"
-	"github.com/katzenpost/minclient/block"
 	"github.com/op/go-logging"
 )
 
-// StorageStub implements the Storage interface
-// as defined in the client library.
-// XXX This should be replaced by something useful.
-type StorageStub struct {
-}
-
-// GetBlocks returns a slice of blocks
-func (s StorageStub) GetBlocks(*[block.MessageIDLength]byte) ([][]byte, error) {
-	return nil, errors.New("failure: StorageStub GetBlocks not yet implemented")
-}
-
-// PutBlock puts a block into storage
-func (s StorageStub) PutBlock(*[block.MessageIDLength]byte, []byte) error {
-	return errors.New("failure: StorageStub PutBlock not yet implemented")
-}
-
 // Session holds the client session
 type Session struct {
-	client          *client.Client
-	log             *logging.Logger
-	clientCfg       *client.Config
-	sessionCfg      *client.SessionConfig
-	session         *client.Session
-	ingressMsgQueue chan string
+	client     *client.Client
+	log        *logging.Logger
+	clientCfg  *client.Config
+	sessionCfg *client.SessionConfig
+	session    *client.Session
 }
 
 // NewSession stablishes a session with provider using key
@@ -69,58 +50,31 @@ func (c Client) NewSession(user string, provider string, key Key) (Session, erro
 		return session, err
 	}
 	session.client = gClient
-	session.ingressMsgQueue = make(chan string, 100)
 	session.log = c.log.GetLogger(fmt.Sprintf("session_%s@%s", user, provider))
 	return session, err
 }
 
-// ReceivedMessage is used to receive a message.
-// This is a method on the MessageConsumer interface
-// which is defined in the client library.
-// XXX fix me
-func (s Session) ReceivedMessage(senderPubKey *ecdh.PublicKey, message []byte) {
-	s.log.Debug("ReceivedMessage")
-	s.ingressMsgQueue <- string(message)
-}
-
-// GetMessage blocks until there is a message in the inbox
-func (s Session) GetMessage() string {
-	s.log.Debug("GetMessage")
-	return <-s.ingressMsgQueue
-}
-
-// ReceivedACK is used to receive a signal that a message was received by
-// the recipient Provider. This is a method on the MessageConsumer interface
-// which is defined in the client library.
-// XXX fix me
-func (s Session) ReceivedACK(messageID *[block.MessageIDLength]byte, message []byte) {
-	s.log.Debug("ReceivedACK")
-}
-
-// Get returns the identity public key for a given identity.
-// This is part of the UserKeyDiscovery interface defined
-// in the client library.
-// XXX fix me
-func (s Session) Get(identity string) (*ecdh.PublicKey, error) {
-	s.log.Debugf("Get identity %s", identity)
-	return nil, nil
-}
-
 // Connect connects the client to the Provider
 func (s Session) Connect(identityKey Key) error {
+	consumer := internal.NewMessageConsumer(s.log)
+	userKeyDiscoveryStub := internal.UserKeyDiscoveryStub{}
 	sessionCfg := client.SessionConfig{
 		User:             s.clientCfg.User,
 		Provider:         s.clientCfg.Provider,
 		IdentityPrivKey:  identityKey.priv,
 		LinkPrivKey:      s.clientCfg.LinkKey,
-		MessageConsumer:  s,
-		Storage:          new(StorageStub),
-		UserKeyDiscovery: s,
+		MessageConsumer:  consumer,
+		Storage:          new(internal.StorageStub),
+		UserKeyDiscovery: userKeyDiscoveryStub,
 	}
 	s.sessionCfg = &sessionCfg
 	var err error
 	s.session, err = s.client.NewSession(&sessionCfg)
 	return err
+}
+
+func (s Session) GetMessage() string {
+	return s.sessionCfg.MessageConsumer.(internal.MessageConsumer).GetMessage()
 }
 
 // Shutdown the session
