@@ -35,21 +35,22 @@ type StorageStub struct {
 
 // GetBlocks returns a slice of blocks
 func (s StorageStub) GetBlocks(*[block.MessageIDLength]byte) ([][]byte, error) {
-	return nil, errors.New("failure: StorageStub GetBlocks not yet implemented.")
+	return nil, errors.New("failure: StorageStub GetBlocks not yet implemented")
 }
 
 // PutBlock puts a block into storage
 func (s StorageStub) PutBlock(*[block.MessageIDLength]byte, []byte) error {
-	return errors.New("failure: StorageStub PutBlock not yet implemented.")
+	return errors.New("failure: StorageStub PutBlock not yet implemented")
 }
 
 // Session holds the client session
 type Session struct {
-	client     *client.Client
-	log        *logging.Logger
-	clientCfg  *client.Config
-	sessionCfg *client.SessionConfig
-	session    *client.Session
+	client          *client.Client
+	log             *logging.Logger
+	clientCfg       *client.Config
+	sessionCfg      *client.SessionConfig
+	session         *client.Session
+	ingressMsgQueue chan string
 }
 
 // NewSession stablishes a session with provider using key
@@ -68,6 +69,7 @@ func (c Client) NewSession(user string, provider string, key Key) (Session, erro
 		return session, err
 	}
 	session.client = gClient
+	session.ingressMsgQueue = make(chan string, 100)
 	session.log = c.log.GetLogger(fmt.Sprintf("session_%s@%s", user, provider))
 	return session, err
 }
@@ -78,6 +80,13 @@ func (c Client) NewSession(user string, provider string, key Key) (Session, erro
 // XXX fix me
 func (s Session) ReceivedMessage(senderPubKey *ecdh.PublicKey, message []byte) {
 	s.log.Debug("ReceivedMessage")
+	s.ingressMsgQueue <- string(message)
+}
+
+// GetMessage blocks until there is a message in the inbox
+func (s *Session) GetMessage() string {
+	s.log.Debug("GetMessage")
+	return <-s.ingressMsgQueue
 }
 
 // ReceivedACK is used to receive a signal that a message was received by
@@ -119,7 +128,7 @@ func (s Session) Shutdown() {
 	s.Shutdown()
 }
 
-// SendMessage into the mix network
+// Send into the mix network
 func (s Session) Send(recipient, provider, msg string) error {
 	raw, err := hex.DecodeString(msg)
 	if err != nil {
@@ -133,7 +142,7 @@ func (s Session) Send(recipient, provider, msg string) error {
 	return nil
 }
 
-// SendMessage into the mix network
+// SendUnreliable into the mix network
 func (s Session) SendUnreliable(recipient, provider, msg string) error {
 	raw, err := hex.DecodeString(msg)
 	if err != nil {
