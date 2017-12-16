@@ -113,6 +113,6 @@ func (s *Session) Send(recipient, provider string, msg []byte) error {
 }
 
 // SendUnreliable into the mix network
-func (s *Session) SendUnreliable(recipient, provider string, msg []byte) error {
-	return s.session.SendUnreliable(recipient, provider, msg)
+func (s *Session) SendUnreliable(recipient, provider string, msg *[]byte) error {
+	return s.session.SendUnreliable(recipient, provider, *msg)
 }
