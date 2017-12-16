@@ -1,6 +1,5 @@
 // session.go - mixnet session client
-// Copyright (C) 2017  Yawning Angel.
-// Copyright (C) 2017  Ruben Pollan.
+// Copyright (C) 2017  Yawning Angel, Ruben Pollan, David Stainton
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Affero General Public License as
@@ -15,141 +14,130 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-package minclient
+package client
 
 import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"time"
 
-	"github.com/katzenpost/core/crypto/rand"
-	"github.com/katzenpost/core/sphinx"
-	"github.com/katzenpost/core/sphinx/constants"
-	"github.com/katzenpost/core/utils"
-	"github.com/katzenpost/minclient"
+	"github.com/katzenpost/client"
+	"github.com/katzenpost/core/crypto/ecdh"
 	"github.com/katzenpost/minclient/block"
 	"github.com/op/go-logging"
 )
 
+// StorageStub implements the Storage interface
+// as defined in the client library.
+// XXX This should be replaced by something useful.
+type StorageStub struct {
+}
+
+// GetBlocks returns a slice of blocks
+func (s StorageStub) GetBlocks(*[block.MessageIDLength]byte) ([][]byte, error) {
+	return nil, errors.New("failure: StorageStub GetBlocks not yet implemented.")
+}
+
+// PutBlock puts a block into storage
+func (s StorageStub) PutBlock(*[block.MessageIDLength]byte, []byte) error {
+	return errors.New("failure: StorageStub PutBlock not yet implemented.")
+}
+
 // Session holds the client session
 type Session struct {
-	client    *minclient.Client
-	queue     chan string
-	connected chan bool
-	log       *logging.Logger
-
-	// TODO: we'll need to add persistency to the surb keys at some point
-	surbKeys map[[constants.SURBIDLength]byte][]byte
+	client     *client.Client
+	log        *logging.Logger
+	clientCfg  *client.Config
+	sessionCfg *client.SessionConfig
+	session    *client.Session
 }
 
 // NewSession stablishes a session with provider using key
-func (client Client) NewSession(user string, provider string, key Key) (Session, error) {
+func (c Client) NewSession(user string, provider string, key Key) (Session, error) {
 	var err error
 	var session Session
-
-	clientCfg := &minclient.ClientConfig{
-		User:        user,
-		Provider:    provider,
-		LinkKey:     key.priv,
-		LogBackend:  client.log,
-		PKIClient:   client.pki,
-		OnConnFn:    session.onConn,
-		OnEmptyFn:   session.onEmpty,
-		OnMessageFn: session.onMessage,
-		OnACKFn:     session.onACK,
+	clientCfg := &client.Config{
+		User:       user,
+		Provider:   provider,
+		LinkKey:    key.priv,
+		LogBackend: c.log,
+		PKIClient:  c.pki,
 	}
-
-	session.queue = make(chan string, 100)
-	session.connected = make(chan bool, 1)
-	session.surbKeys = make(map[[constants.SURBIDLength]byte][]byte)
-	session.client, err = minclient.New(clientCfg)
-	session.log = client.log.GetLogger(fmt.Sprintf("callbacks:%s@%s", user, provider))
+	gClient, err := client.New(clientCfg)
+	if err != nil {
+		return session, err
+	}
+	session.client = gClient
+	session.log = c.log.GetLogger(fmt.Sprintf("session_%s@%s", user, provider))
 	return session, err
+}
+
+// ReceivedMessage is used to receive a message.
+// This is a method on the MessageConsumer interface
+// which is defined in the client library.
+// XXX fix me
+func (s Session) ReceivedMessage(senderPubKey *ecdh.PublicKey, message []byte) {
+	s.log.Debug("ReceivedMessage")
+}
+
+// ReceivedACK is used to receive a signal that a message was received by
+// the recipient Provider. This is a method on the MessageConsumer interface
+// which is defined in the client library.
+// XXX fix me
+func (s Session) ReceivedACK(messageID *[block.MessageIDLength]byte, message []byte) {
+	s.log.Debug("ReceivedACK")
+}
+
+// Get returns the identity public key for a given identity.
+// This is part of the UserKeyDiscovery interface defined
+// in the client library.
+// XXX fix me
+func (s Session) Get(identity string) (*ecdh.PublicKey, error) {
+	s.log.Debugf("Get identity %s", identity)
+	return nil, nil
+}
+
+// Connect connects the client to the Provider
+func (s Session) Connect(identityKey Key) error {
+	sessionCfg := client.SessionConfig{
+		User:             s.clientCfg.User,
+		Provider:         s.clientCfg.Provider,
+		IdentityPrivKey:  identityKey.priv,
+		LinkPrivKey:      s.clientCfg.LinkKey,
+		MessageConsumer:  s,
+		Storage:          new(StorageStub),
+		UserKeyDiscovery: s,
+	}
+	s.sessionCfg = &sessionCfg
+	var err error
+	s.session, err = s.client.NewSession(&sessionCfg)
+	return err
 }
 
 // Shutdown the session
 func (s Session) Shutdown() {
-	s.client.Shutdown()
-}
-
-// WaitToConnect returns when the session is stablished
-func (s Session) WaitToConnect() {
-	<-s.connected
+	s.Shutdown()
 }
 
 // SendMessage into the mix network
-func (s Session) SendMessage(recipient, provider, msg string) error {
-	surbID := [constants.SURBIDLength]byte{}
-	_, err := rand.Reader.Read(surbID[:])
+func (s Session) Send(recipient, provider, msg string) error {
+	raw, err := hex.DecodeString(msg)
 	if err != nil {
 		return err
 	}
-
-	chunk := [block.BlockCiphertextLength]byte{}
-	copy(chunk[:], []byte(msg))
-	surbKey, _, err := s.client.SendCiphertext(recipient, provider, &surbID, chunk[:])
+	messageID, err := s.session.Send(recipient, provider, raw)
 	if err != nil {
 		return err
 	}
-
-	s.surbKeys[surbID] = surbKey
+	s.log.Debugf("sent message with messageID %x", messageID)
 	return nil
 }
 
-// GetMessage blocks until there is a message in the inbox
-func (s *Session) GetMessage(timeout int64) (string, error) {
-	if timeout == 0 {
-		return <-s.queue, nil
-	}
-
-	select {
-	case msg := <-s.queue:
-		return msg, nil
-	case <-time.After(time.Second * time.Duration(timeout)):
-		return "", errors.New("Timeout")
-	}
-}
-
-func (s *Session) onMessage(b []byte) error {
-	s.log.Noticef("Received Message: %v", len(b))
-	s.log.Noticef("====> %v", string(b))
-
-	s.queue <- string(b)
-	return nil
-}
-
-func (s *Session) onACK(id *[constants.SURBIDLength]byte, b []byte) error {
-	s.log.Noticef("Received SURB-ACK: %v", len(b))
-	s.log.Noticef("SURB-ID: %v", hex.EncodeToString(id[:]))
-
-	// surbKeys should have a lock in production code, but lazy.
-	k, ok := s.surbKeys[*id]
-	if !ok {
-		s.log.Errorf("Failed to find SURB SPRP key")
-		return nil
-	}
-
-	payload, err := sphinx.DecryptSURBPayload(b, k)
+// SendMessage into the mix network
+func (s Session) SendUnreliable(recipient, provider, msg string) error {
+	raw, err := hex.DecodeString(msg)
 	if err != nil {
-		s.log.Errorf("Failed to decrypt SURB: %v", err)
-		return nil
+		return err
 	}
-	if utils.CtIsZero(payload) {
-		s.log.Noticef("SURB Payload: %v bytes of 0x00", len(payload))
-	} else {
-		s.log.Noticef("SURB Payload: %v", hex.Dump(payload))
-	}
-
-	return nil
-}
-
-func (s *Session) onConn(isConnected bool) {
-	s.log.Noticef("Peer connection status changed: %v", isConnected)
-	s.connected <- true
-}
-
-func (s *Session) onEmpty() error {
-	s.log.Noticef("Providers queue is empty")
-	return nil
+	return s.session.SendUnreliable(recipient, provider, raw)
 }

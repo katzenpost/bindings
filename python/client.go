@@ -15,8 +15,8 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-// Package minclient provides a mixnet minimal client library
-package minclient
+// Package client provides a mixnet client library
+package client
 
 import (
 	npki "github.com/katzenpost/authority/nonvoting/client"
