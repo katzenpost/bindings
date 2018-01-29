@@ -1,6 +1,9 @@
 package client
 
 import (
+	"errors"
+	"time"
+
 	"github.com/katzenpost/core/crypto/ecdh"
 	"github.com/katzenpost/mailproxy"
 	"github.com/katzenpost/mailproxy/config"
@@ -63,4 +66,33 @@ func (c Client) Send(recipient, msg string) error {
 	identityKey.FromBytes(identityKeyBytes)
 	c.proxy.SetRecipient(recipient, identityKey.PublicKey())
 	return c.proxy.SendMessage(c.address, recipient, []byte(msg))
+}
+
+type Message struct {
+	Sender  string
+	Payload string
+}
+
+func (c Client) GetMessage(timeout int64) (Message, error) {
+	if timeout == 0 {
+		ev := <-c.eventSink
+		return c.handleEvent(ev)
+	}
+
+	select {
+	case ev := <-c.eventSink:
+		return c.handleEvent(ev)
+	case <-time.After(time.Second * time.Duration(timeout)):
+		return Message{}, errors.New("Timeout")
+	}
+}
+
+func (c Client) handleEvent(ev event.Event) (Message, error) {
+	switch ev.(type) {
+	case *event.MessageReceivedEvent:
+		msg, err := c.proxy.ReceivePop(c.address)
+		return Message{msg.SenderID, string(msg.Payload)}, err
+	default:
+		return Message{}, errors.New("Another event arrived")
+	}
 }
