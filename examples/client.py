@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # client.py - python example mixnet client
 # Copyright (C) 2017  Yawning Angel.
-# Copyright (C) 2017  Ruben Pollan.
+# Copyright (C) 2018  Ruben Pollan.
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Affero General Public License as
@@ -16,24 +16,34 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-import minclient
+import katzenpost
 
-name = "alice"
-provider = "example.com"
-keyStr = "4d488962dd5a7c2d2d2360a6bbe258bf75022eb39a05b8c877f3f92e99fd298c"
-pkiAddr = "192.0.2.1:29483"
-pkiKey = "900895721381C0756D28954524BB1D090F54C8DD9295F84B1D8A93F1E3C17AD8"
+linkKey = "4d488962dd5a7c2d2d2360a6bbe258bf75022eb39a05b8c877f3f92e99fd298c"
+key = katzenpost.StringToKey(linkKey)
 
-client = minclient.NewClient(pkiAddr, pkiKey, minclient.LogConfig())
-key = minclient.StringToKey(keyStr)
-session = client.NewSession(name, provider, key)
-session.WaitToConnect()
+cfg = katzenpost.Config(
+    PkiAddress="192.0.2.1:29483",
+    PkiKey="900895721381C0756D28954524BB1D090F54C8DD9295F84B1D8A93F1E3C17AD8",
+    User="alice",
+    LinkKey=key,
+    Provider="example.com",
+    Log=katzenpost.LogConfig()
+)
 
-session.SendMessage("bob", "panoramix.org", "hello bob!!!")
-print("Message sent")
+c = katzenpost.New(cfg)
 
-while 1:
+mail = """From: alice@example.com
+To: bob@panoramix.com
+Subject: hello
+
+Hello there.
+"""
+c.Send("bob@panoramix.com", mail)
+
+while True:
     try:
-        print(session.GetMessage(1))
+        m = c.GetMessage(1)
     except RuntimeError:
-        pass
+        continue
+    print("=================>" + m.Sender)
+    print(m.Payload)

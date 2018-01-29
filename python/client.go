@@ -1,4 +1,21 @@
-package client
+// client.go - mixnet client
+// Copyright (C) 2017  Yawning Angel.
+// Copyright (C) 2018  Ruben Pollan.
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as
+// published by the Free Software Foundation, either version 3 of the
+// License, or (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Affero General Public License for more details.
+//
+// You should have received a copy of the GNU Affero General Public License
+// along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+package katzenpost
 
 import (
 	"errors"
@@ -23,6 +40,7 @@ type Client struct {
 	eventSink chan event.Event
 }
 
+// New creates a katzenpost client
 func New(cfg Config) (Client, error) {
 	eventSink := make(chan event.Event)
 	dataDir, err := cfg.getDataDir()
@@ -56,11 +74,13 @@ func New(cfg Config) (Client, error) {
 	return Client{cfg.getAddress(), proxy, eventSink}, err
 }
 
+// Shutdown the client
 func (c Client) Shutdown() {
 	c.proxy.Shutdown()
 	c.proxy.Wait()
 }
 
+// Shutdown a message into katzenpost
 func (c Client) Send(recipient, msg string) error {
 	var identityKey ecdh.PrivateKey
 	identityKey.FromBytes(identityKeyBytes)
@@ -68,11 +88,13 @@ func (c Client) Send(recipient, msg string) error {
 	return c.proxy.SendMessage(c.address, recipient, []byte(msg))
 }
 
+// Message received from katzenpost
 type Message struct {
 	Sender  string
 	Payload string
 }
 
+// GetMessage from katzenpost
 func (c Client) GetMessage(timeout int64) (Message, error) {
 	if timeout == 0 {
 		ev := <-c.eventSink

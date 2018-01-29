@@ -1,4 +1,4 @@
-all: python
+all: katzenpost.so
 
-python:
-	GODEBUG=cgocheck=0 gopy bind -lang="py2" .
+katzenpost.so: python/*.go
+	GODEBUG=cgocheck=0 gopy bind -lang="py2" ./python
