@@ -18,6 +18,7 @@
 package katzenpost
 
 import (
+	"errors"
 	"time"
 
 	"github.com/katzenpost/core/crypto/ecdh"
@@ -41,10 +42,11 @@ func (t TimeoutError) Error() string {
 
 // Client is katzenpost object
 type Client struct {
-	address   string
-	proxy     *mailproxy.Proxy
-	eventSink chan event.Event
-	recvCh    chan bool
+	address      string
+	proxy        *mailproxy.Proxy
+	eventSink    chan event.Event
+	recvCh       chan bool
+	connectionCh chan bool
 }
 
 // New creates a katzenpost client
@@ -78,8 +80,20 @@ func New(cfg Config) (Client, error) {
 	}
 
 	recvCh := make(chan bool, 10)
+	connectionCh := make(chan bool, 10)
 	proxy, err := mailproxy.New(&proxyCfg)
-	return Client{cfg.getAddress(), proxy, eventSink, recvCh}, err
+	c := Client{cfg.getAddress(), proxy, eventSink, recvCh, connectionCh}
+	go c.eventHandler()
+	return c, err
+}
+
+// WaitToConnect wait's to be connected
+func (c Client) WaitToConnect() error {
+	isConnected := <-c.connectionCh
+	if !isConnected {
+		return errors.New("Not connected")
+	}
+	return nil
 }
 
 // Shutdown the client
@@ -127,6 +141,9 @@ func (c Client) eventHandler() {
 		switch ev.(type) {
 		case *event.MessageReceivedEvent:
 			c.recvCh <- true
+		case *event.ConnectionStatusEvent:
+			conEv := ev.(*event.ConnectionStatusEvent)
+			c.connectionCh <- conEv.IsConnected
 		default:
 			continue
 		}
