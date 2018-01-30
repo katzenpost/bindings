@@ -63,6 +63,7 @@ func (c Config) getAccount() *config.Account {
 		Authority:   pkiName,
 		LinkKey:     c.LinkKey.priv,
 		IdentityKey: &identityKey,
+		StorageKey:  nil,
 	}
 }
 
