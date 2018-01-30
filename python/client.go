@@ -77,7 +77,6 @@ func New(cfg Config) (Client, error) {
 // Shutdown the client
 func (c Client) Shutdown() {
 	c.proxy.Shutdown()
-	c.proxy.Wait()
 }
 
 // Send a message into katzenpost

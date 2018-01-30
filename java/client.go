@@ -77,10 +77,9 @@ func New(cfg Config) (Client, error) {
 // Shutdown the client
 func (c Client) Shutdown() {
 	c.proxy.Shutdown()
-	c.proxy.Wait()
 }
 
-// Shutdown a message into katzenpost
+// Send a message into katzenpost
 func (c Client) Send(recipient, msg string) error {
 	var identityKey ecdh.PrivateKey
 	identityKey.FromBytes(identityKeyBytes)
