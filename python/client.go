@@ -96,6 +96,11 @@ func (c Client) WaitToConnect() error {
 	return nil
 }
 
+// ListProviders returns the provider list
+func (c Client) ListProviders() ([]string, error) {
+	return c.proxy.ListProviders(pkiName)
+}
+
 // Shutdown the client
 func (c Client) Shutdown() {
 	c.proxy.Shutdown()
