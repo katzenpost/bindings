@@ -17,11 +17,16 @@ dependencies
 
 * golang 1.9 or later
 
-* pkg-utils
-
 * gopy
 
   go get github.com/go-python/gopy
+
+usage
+=====
+
+Note that you have to export ``GODEBUG`` variable in the execution environment in order for the bindings to work properly::
+
+  GODEBUG=cgocheck=0
 
 
 license
