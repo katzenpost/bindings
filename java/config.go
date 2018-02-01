@@ -33,8 +33,8 @@ type Config struct {
 	PkiKey     string
 	User       string
 	Provider   string
-	LinkKey    Key
-	Log        LogConfig
+	LinkKey    *Key
+	Log        *LogConfig
 	DataDir    string
 }
 

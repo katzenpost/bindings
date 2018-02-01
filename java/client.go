@@ -33,19 +33,28 @@ const (
 
 var identityKeyBytes = []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 
+// TimeoutError is returned on timeouts
+type TimeoutError struct{}
+
+func (t TimeoutError) Error() string {
+	return "Timeout"
+}
+
 // Client is katzenpost object
 type Client struct {
 	address   string
 	proxy     *mailproxy.Proxy
 	eventSink chan event.Event
+	recvCh    chan bool
+	connectionCh chan bool
 }
 
 // New creates a katzenpost client
-func New(cfg Config) (Client, error) {
+func New(cfg *Config) (*Client, error) {
 	eventSink := make(chan event.Event)
 	dataDir, err := cfg.getDataDir()
 	if err != nil {
-		return Client{}, err
+		return &Client{}, err
 	}
 
 	proxyCfg := config.Config{
@@ -63,15 +72,28 @@ func New(cfg Config) (Client, error) {
 			pkiName: cfg.getAuthority(),
 		},
 		Account:    []*config.Account{cfg.getAccount()},
-		Recipients: map[string]string{},
+		Recipients: map[string]*ecdh.PublicKey{},
 	}
 	err = proxyCfg.FixupAndValidate()
 	if err != nil {
-		return Client{}, err
+		return &Client{}, err
 	}
 
+	recvCh := make(chan bool, 10)
+	connectionCh := make(chan bool, 10)
 	proxy, err := mailproxy.New(&proxyCfg)
-	return Client{cfg.getAddress(), proxy, eventSink}, err
+	c := &Client{cfg.getAddress(), proxy, eventSink, recvCh, connectionCh}
+	go c.eventHandler()
+	return c, err
+}
+
+// WaitToConnect wait's to be connected
+func (c Client) WaitToConnect() error {
+	isConnected := <-c.connectionCh
+	if !isConnected {
+		return errors.New("Not connected")
+	}
+	return nil
 }
 
 // Shutdown the client
@@ -94,26 +116,36 @@ type Message struct {
 }
 
 // GetMessage from katzenpost
-func (c Client) GetMessage(timeout int64) (Message, error) {
+func (c Client) GetMessage(timeout int64) (*Message, error) {
 	if timeout == 0 {
-		ev := <-c.eventSink
-		return c.handleEvent(ev)
+		<-c.recvCh
+		return c.getMsg()
 	}
 
 	select {
-	case ev := <-c.eventSink:
-		return c.handleEvent(ev)
+	case <-c.recvCh:
+		return c.getMsg()
 	case <-time.After(time.Second * time.Duration(timeout)):
-		return Message{}, errors.New("Timeout")
+		return nil, nil
 	}
 }
 
-func (c Client) handleEvent(ev event.Event) (Message, error) {
-	switch ev.(type) {
-	case *event.MessageReceivedEvent:
-		msg, err := c.proxy.ReceivePop(c.address)
-		return Message{msg.SenderID, string(msg.Payload)}, err
-	default:
-		return Message{}, errors.New("Another event arrived")
+func (c Client) getMsg() (*Message, error) {
+	msg, err := c.proxy.ReceivePop(c.address)
+	return &Message{msg.SenderID, string(msg.Payload)}, err
+}
+
+func (c Client) eventHandler() {
+	for {
+		ev := <-c.eventSink
+		switch ev.(type) {
+		case *event.MessageReceivedEvent:
+			c.recvCh <- true
+		case *event.ConnectionStatusEvent:
+			conEv := ev.(*event.ConnectionStatusEvent)
+			c.connectionCh <- conEv.IsConnected
+		default:
+			continue
+		}
 	}
 }

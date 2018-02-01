@@ -72,7 +72,7 @@ func New(cfg Config) (Client, error) {
 			pkiName: cfg.getAuthority(),
 		},
 		Account:    []*config.Account{cfg.getAccount()},
-		Recipients: map[string]string{},
+		Recipients: map[string]*ecdh.PublicKey{},
 	}
 	err = proxyCfg.FixupAndValidate()
 	if err != nil {
