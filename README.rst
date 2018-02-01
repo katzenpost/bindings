@@ -17,6 +17,8 @@ dependencies
 
 * golang 1.9 or later
 
+* pkg-utils
+
 * gopy
 
   go get github.com/go-python/gopy
