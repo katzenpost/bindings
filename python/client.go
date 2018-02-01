@@ -18,10 +18,15 @@
 package katzenpost
 
 import (
+	"encoding/json"
 	"errors"
+	"net/http"
+	"net/url"
+	"strings"
 	"time"
 
 	"github.com/katzenpost/core/crypto/ecdh"
+	"github.com/katzenpost/core/pki"
 	"github.com/katzenpost/mailproxy"
 	"github.com/katzenpost/mailproxy/config"
 	"github.com/katzenpost/mailproxy/event"
@@ -30,8 +35,6 @@ import (
 const (
 	pkiName = "default"
 )
-
-var identityKeyBytes = []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 
 // TimeoutError is returned on timeouts
 type TimeoutError struct{}
@@ -98,7 +101,16 @@ func (c Client) WaitToConnect() error {
 
 // ListProviders returns the provider list
 func (c Client) ListProviders() ([]string, error) {
-	return c.proxy.ListProviders(pkiName)
+	providers, err := c.proxy.ListProviders(pkiName)
+	if err != nil {
+		return nil, err
+	}
+
+	names := make([]string, len(providers))
+	for i, provider := range providers {
+		names[i] = provider.Name
+	}
+	return names, nil
 }
 
 // Shutdown the client
@@ -108,10 +120,56 @@ func (c Client) Shutdown() {
 
 // Send a message into katzenpost
 func (c Client) Send(recipient, msg string) error {
-	var identityKey ecdh.PrivateKey
-	identityKey.FromBytes(identityKeyBytes)
-	c.proxy.SetRecipient(recipient, identityKey.PublicKey())
+	err := c.fetchKey(recipient)
+	if err != nil {
+		return err
+	}
 	return c.proxy.SendMessage(c.address, recipient, []byte(msg))
+}
+
+func (c Client) fetchKey(address string) error {
+	parts := strings.Split(address, "@")
+	if len(parts) != 2 {
+		return errors.New("Not valid address address: " + address)
+	}
+	user := strings.ToLower(parts[0])
+	providerName := parts[1]
+
+	providers, err := c.proxy.ListProviders(pkiName)
+	if err != nil {
+		return err
+	}
+	providerAddress := ""
+	for _, provider := range providers {
+		if provider.Name == providerName {
+			addr := provider.Addresses[pki.TransportTCPv4][0]
+			providerAddress = strings.Split(addr, ":")[0]
+			break
+		}
+	}
+	if providerAddress == "" {
+		return errors.New("Recipient provider doesn't exist in the authority document: " + providerName)
+	}
+
+	resp, err := http.PostForm("http://"+providerAddress+":7900/getidkey", url.Values{"user": {user}})
+	if err != nil {
+		return errors.New("Can't fetch key for address: " + err.Error())
+	}
+	defer resp.Body.Close()
+
+	decoder := json.NewDecoder(resp.Body)
+	var response struct {
+		Getidkey string
+	}
+	err = decoder.Decode(&response)
+	if err != nil {
+		return errors.New("There was a problem reading the key fetch response: " + err.Error())
+	}
+
+	var key ecdh.PublicKey
+	key.FromString(response.Getidkey)
+	c.proxy.SetRecipient(address, &key)
+	return nil
 }
 
 // Message received from katzenpost

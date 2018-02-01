@@ -22,20 +22,20 @@ import (
 	"os"
 	"path"
 
-	"github.com/katzenpost/core/crypto/ecdh"
 	"github.com/katzenpost/core/crypto/eddsa"
 	"github.com/katzenpost/mailproxy/config"
 )
 
 // Config has the client configuration
 type Config struct {
-	PkiAddress string
-	PkiKey     string
-	User       string
-	Provider   string
-	LinkKey    Key
-	Log        LogConfig
-	DataDir    string
+	PkiAddress  string
+	PkiKey      string
+	User        string
+	Provider    string
+	IdentityKey Key
+	LinkKey     Key
+	Log         LogConfig
+	DataDir     string
 }
 
 // LogConfig keeps the configuration of the loger
@@ -55,14 +55,12 @@ func (c Config) getAuthority() *config.NonvotingAuthority {
 }
 
 func (c Config) getAccount() *config.Account {
-	var identityKey ecdh.PrivateKey
-	identityKey.FromBytes(identityKeyBytes)
 	return &config.Account{
 		User:        c.User,
 		Provider:    c.Provider,
 		Authority:   pkiName,
+		IdentityKey: c.IdentityKey.priv,
 		LinkKey:     c.LinkKey.priv,
-		IdentityKey: &identityKey,
 		StorageKey:  nil,
 	}
 }
