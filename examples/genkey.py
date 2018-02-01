@@ -15,8 +15,8 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-import minclient
+import katzenpost
 
-key = minclient.GenKey()
+key = katzenpost.GenKey()
 print("Public key: %s" % (key.Public,))
 print("Private key: %s" % (key.Private,))
