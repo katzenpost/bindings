@@ -130,7 +130,7 @@ func (c Client) GetMessage(timeout int64) (Message, error) {
 	select {
 	case <-c.recvCh:
 		return c.getMsg()
-	case <-time.After(time.Second * time.Duration(timeout)):
+	case <-time.After(time.Millisecond * time.Duration(timeout)):
 		return Message{}, TimeoutError{}
 	}
 }
