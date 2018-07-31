@@ -25,6 +25,7 @@ import (
 	"github.com/katzenpost/mailproxy"
 	"github.com/katzenpost/mailproxy/config"
 	"github.com/katzenpost/mailproxy/event"
+	"github.com/katzenpost/minclient/block"
 )
 
 const (
@@ -47,6 +48,13 @@ type Client struct {
 	eventSink    chan event.Event
 	recvCh       chan bool
 	connectionCh chan bool
+	kaetzchenCh  chan kaetzchenKeyRequest
+}
+
+type kaetzchenKeyRequest struct {
+	recipient string
+	msgID     []byte
+	ch        chan error
 }
 
 // New creates a katzenpost client
@@ -81,8 +89,9 @@ func New(cfg *Config) (*Client, error) {
 
 	recvCh := make(chan bool, 10)
 	connectionCh := make(chan bool, 10)
+	kaetzchenCh := make(chan kaetzchenKeyRequest, 10)
 	proxy, err := mailproxy.New(&proxyCfg)
-	c := &Client{cfg.getAddress(), proxy, eventSink, recvCh, connectionCh}
+	c := &Client{cfg.getAddress(), proxy, eventSink, recvCh, connectionCh, kaetzchenCh}
 	go c.eventHandler()
 	return c, err
 }
@@ -136,17 +145,57 @@ func (c Client) getMsg() (*Message, error) {
 	return &Message{msg.SenderID, string(msg.Payload)}, err
 }
 
+// GetKey for recipient and add it to the local key storage
+func (c Client) GetKey(recipient string) error {
+	msgID, err := c.proxy.QueryKeyFromProvider(c.address, recipient)
+	if err != nil {
+		return err
+	}
+	ch := make(chan error)
+	c.kaetzchenCh <- kaetzchenKeyRequest{recipient, msgID, ch}
+	return <-ch
+}
+
+type requestIndex [block.MessageIDLength]byte
+
 func (c Client) eventHandler() {
+	keyRequests := make(map[requestIndex]kaetzchenKeyRequest)
+
 	for {
-		ev := <-c.eventSink
-		switch ev.(type) {
-		case *event.MessageReceivedEvent:
-			c.recvCh <- true
-		case *event.ConnectionStatusEvent:
-			conEv := ev.(*event.ConnectionStatusEvent)
-			c.connectionCh <- conEv.IsConnected
-		default:
-			continue
+		select {
+		case ev := <-c.eventSink:
+			switch event := ev.(type) {
+			case *event.MessageReceivedEvent:
+				c.recvCh <- true
+			case *event.ConnectionStatusEvent:
+				c.connectionCh <- event.IsConnected
+			case *event.KaetzchenReplyEvent:
+				var index requestIndex
+				copy(index[:], event.MessageID[:block.MessageIDLength])
+				request, ok := keyRequests[index]
+				if !ok {
+					continue
+				}
+
+				if event.Err != nil {
+					request.ch <- event.Err
+					continue
+				}
+
+				_, key, err := c.proxy.ParseKeyQueryResponse(event.Payload)
+				if err != nil {
+					request.ch <- err
+				} else {
+					request.ch <- c.proxy.SetRecipient(request.recipient, key)
+				}
+			default:
+				continue
+			}
+
+		case request := <-c.kaetzchenCh:
+			var index requestIndex
+			copy(index[:], request.msgID[:block.MessageIDLength])
+			keyRequests[index] = request
 		}
 	}
 }
