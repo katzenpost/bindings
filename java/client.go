@@ -156,6 +156,12 @@ func (c Client) GetKey(recipient string) error {
 	return <-ch
 }
 
+// HasKey returns if the key storage have a key for recipient
+func (c Client) HasKey(recipient string) bool {
+	key, err := c.proxy.GetRecipient(recipient)
+	return err == nil && key != nil
+}
+
 type requestIndex [block.MessageIDLength]byte
 
 func (c Client) eventHandler() {
