@@ -32,8 +32,6 @@ const (
 	pkiName = "default"
 )
 
-var identityKeyBytes = []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
-
 // TimeoutError is returned on timeouts
 type TimeoutError struct{}
 
@@ -112,9 +110,6 @@ func (c Client) Shutdown() {
 
 // Send a message into katzenpost
 func (c Client) Send(recipient, msg string) error {
-	var identityKey ecdh.PrivateKey
-	identityKey.FromBytes(identityKeyBytes)
-	c.proxy.SetRecipient(recipient, identityKey.PublicKey())
 	_, err := c.proxy.SendMessage(c.address, recipient, []byte(msg))
 	return err
 }
