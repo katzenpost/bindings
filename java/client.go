@@ -42,10 +42,10 @@ func (t TimeoutError) Error() string {
 
 // Client is katzenpost object
 type Client struct {
-	address   string
-	proxy     *mailproxy.Proxy
-	eventSink chan event.Event
-	recvCh    chan bool
+	address      string
+	proxy        *mailproxy.Proxy
+	eventSink    chan event.Event
+	recvCh       chan bool
 	connectionCh chan bool
 }
 
@@ -106,7 +106,8 @@ func (c Client) Send(recipient, msg string) error {
 	var identityKey ecdh.PrivateKey
 	identityKey.FromBytes(identityKeyBytes)
 	c.proxy.SetRecipient(recipient, identityKey.PublicKey())
-	return c.proxy.SendMessage(c.address, recipient, []byte(msg))
+	_, err := c.proxy.SendMessage(c.address, recipient, []byte(msg))
+	return err
 }
 
 // Message received from katzenpost
