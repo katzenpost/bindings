@@ -29,7 +29,8 @@ import (
 )
 
 const (
-	pkiName = "default"
+	pkiName        = "default"
+	kaetzenTimeout = 2 * time.Minute
 )
 
 // TimeoutError is returned on timeouts
@@ -148,7 +149,13 @@ func (c Client) GetKey(recipient string) error {
 	}
 	ch := make(chan error)
 	c.kaetzchenCh <- kaetzchenKeyRequest{recipient, msgID, ch}
-	return <-ch
+
+	select {
+	case err = <-ch:
+		return err
+	case <-time.After(kaetzenTimeout):
+		return TimeoutError{}
+	}
 }
 
 // HasKey returns if the key storage have a key for recipient
@@ -189,6 +196,7 @@ func (c Client) eventHandler() {
 				} else {
 					request.ch <- c.proxy.SetRecipient(request.recipient, key)
 				}
+				delete(keyRequests, index)
 			default:
 				continue
 			}
