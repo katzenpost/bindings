@@ -31,7 +31,7 @@ import (
 
 const (
 	pkiName        = "default"
-	kaetzenTimeout = 2 * time.Minute
+	kaetzenTimeout = 5 * time.Minute
 )
 
 // TimeoutError is returned on timeouts
