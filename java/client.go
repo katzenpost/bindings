@@ -18,6 +18,7 @@
 package katzenpost
 
 import (
+	"encoding/hex"
 	"errors"
 	"time"
 
@@ -116,13 +117,15 @@ func (c Client) Send(recipient, msg string) ([]byte, error) {
 
 // Message received from katzenpost
 type Message struct {
-	Sender  string
-	Payload string
+	Sender    string
+	Payload   string
+	SenderKey string
+	MessageID []byte
 }
 
 // GetMessage from katzenpost
-func (c Client) GetMessage(timeout int64) (*Message, error) {
-	if timeout == 0 {
+func (c Client) GetMessage(timeoutMs int64) (*Message, error) {
+	if timeoutMs == 0 {
 		<-c.recvCh
 		return c.getMsg()
 	}
@@ -130,14 +133,14 @@ func (c Client) GetMessage(timeout int64) (*Message, error) {
 	select {
 	case <-c.recvCh:
 		return c.getMsg()
-	case <-time.After(time.Second * time.Duration(timeout)):
+	case <-time.After(time.Millisecond * time.Duration(timeoutMs)):
 		return nil, nil
 	}
 }
 
 func (c Client) getMsg() (*Message, error) {
 	msg, err := c.proxy.ReceivePop(c.address)
-	return &Message{msg.SenderID, string(msg.Payload)}, err
+	return &Message{msg.SenderID, string(msg.Payload), hex.EncodeToString(msg.SenderKey.Bytes()), msg.MessageID}, err
 }
 
 // GetKey for recipient and add it to the local key storage
