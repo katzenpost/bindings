@@ -97,12 +97,16 @@ func New(cfg *Config) (*Client, error) {
 }
 
 // WaitToConnect wait's to be connected
-func (c Client) WaitToConnect() error {
-	isConnected := <-c.connectionCh
-	if !isConnected {
-		return errors.New("Not connected")
+func (c Client) WaitToConnect(timeoutMs int) (bool, error) {
+	select {
+	case isConnected := <-c.connectionCh:
+		if !isConnected {
+			return false, errors.New("Not connected")
+		}
+		return true, nil
+	case <-time.After(time.Millisecond * time.Duration(timeoutMs)):
+		return false, nil
 	}
-	return nil
 }
 
 // Shutdown the client
