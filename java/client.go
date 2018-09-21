@@ -110,9 +110,8 @@ func (c Client) Shutdown() {
 }
 
 // Send a message into katzenpost
-func (c Client) Send(recipient, msg string) error {
-	_, err := c.proxy.SendMessage(c.address, recipient, []byte(msg))
-	return err
+func (c Client) Send(recipient, msg string) ([]byte, error) {
+	return c.proxy.SendMessage(c.address, recipient, []byte(msg))
 }
 
 // Message received from katzenpost
