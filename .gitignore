@@ -2,3 +2,6 @@
 *.so
 *.pyc
 data
+
+# Non-external dependencies.
+vendor/github.com/katzenpost
