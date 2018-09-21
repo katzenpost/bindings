@@ -18,6 +18,7 @@
 package katzenpost
 
 import (
+	"encoding/hex"
 	"errors"
 	"time"
 
@@ -25,13 +26,13 @@ import (
 	"github.com/katzenpost/mailproxy"
 	"github.com/katzenpost/mailproxy/config"
 	"github.com/katzenpost/mailproxy/event"
+	"github.com/katzenpost/minclient/block"
 )
 
 const (
-	pkiName = "default"
+	pkiName        = "default"
+	kaetzenTimeout = 5 * time.Minute
 )
-
-var identityKeyBytes = []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 
 // TimeoutError is returned on timeouts
 type TimeoutError struct{}
@@ -42,11 +43,18 @@ func (t TimeoutError) Error() string {
 
 // Client is katzenpost object
 type Client struct {
-	address   string
-	proxy     *mailproxy.Proxy
-	eventSink chan event.Event
-	recvCh    chan bool
+	address      string
+	proxy        *mailproxy.Proxy
+	eventSink    chan event.Event
+	recvCh       chan bool
 	connectionCh chan bool
+	kaetzchenCh  chan kaetzchenKeyRequest
+}
+
+type kaetzchenKeyRequest struct {
+	recipient string
+	msgID     []byte
+	ch        chan error
 }
 
 // New creates a katzenpost client
@@ -81,19 +89,24 @@ func New(cfg *Config) (*Client, error) {
 
 	recvCh := make(chan bool, 10)
 	connectionCh := make(chan bool, 10)
+	kaetzchenCh := make(chan kaetzchenKeyRequest, 10)
 	proxy, err := mailproxy.New(&proxyCfg)
-	c := &Client{cfg.getAddress(), proxy, eventSink, recvCh, connectionCh}
+	c := &Client{cfg.getAddress(), proxy, eventSink, recvCh, connectionCh, kaetzchenCh}
 	go c.eventHandler()
 	return c, err
 }
 
 // WaitToConnect wait's to be connected
-func (c Client) WaitToConnect() error {
-	isConnected := <-c.connectionCh
-	if !isConnected {
-		return errors.New("Not connected")
+func (c Client) WaitToConnect(timeoutMs int) (bool, error) {
+	select {
+	case isConnected := <-c.connectionCh:
+		if !isConnected {
+			return false, errors.New("Not connected")
+		}
+		return true, nil
+	case <-time.After(time.Millisecond * time.Duration(timeoutMs)):
+		return false, nil
 	}
-	return nil
 }
 
 // Shutdown the client
@@ -102,22 +115,21 @@ func (c Client) Shutdown() {
 }
 
 // Send a message into katzenpost
-func (c Client) Send(recipient, msg string) error {
-	var identityKey ecdh.PrivateKey
-	identityKey.FromBytes(identityKeyBytes)
-	c.proxy.SetRecipient(recipient, identityKey.PublicKey())
+func (c Client) Send(recipient, msg string) ([]byte, error) {
 	return c.proxy.SendMessage(c.address, recipient, []byte(msg))
 }
 
 // Message received from katzenpost
 type Message struct {
-	Sender  string
-	Payload string
+	Sender    string
+	Payload   string
+	SenderKey string
+	MessageID []byte
 }
 
 // GetMessage from katzenpost
-func (c Client) GetMessage(timeout int64) (*Message, error) {
-	if timeout == 0 {
+func (c Client) GetMessage(timeoutMs int64) (*Message, error) {
+	if timeoutMs == 0 {
 		<-c.recvCh
 		return c.getMsg()
 	}
@@ -125,27 +137,80 @@ func (c Client) GetMessage(timeout int64) (*Message, error) {
 	select {
 	case <-c.recvCh:
 		return c.getMsg()
-	case <-time.After(time.Second * time.Duration(timeout)):
+	case <-time.After(time.Millisecond * time.Duration(timeoutMs)):
 		return nil, nil
 	}
 }
 
 func (c Client) getMsg() (*Message, error) {
 	msg, err := c.proxy.ReceivePop(c.address)
-	return &Message{msg.SenderID, string(msg.Payload)}, err
+	return &Message{msg.SenderID, string(msg.Payload), hex.EncodeToString(msg.SenderKey.Bytes()), msg.MessageID}, err
 }
 
+// GetKey for recipient and add it to the local key storage
+func (c Client) GetKey(recipient string) error {
+	msgID, err := c.proxy.QueryKeyFromProvider(c.address, recipient)
+	if err != nil {
+		return err
+	}
+	ch := make(chan error)
+	c.kaetzchenCh <- kaetzchenKeyRequest{recipient, msgID, ch}
+
+	select {
+	case err = <-ch:
+		return err
+	case <-time.After(kaetzenTimeout):
+		return TimeoutError{}
+	}
+}
+
+// HasKey returns if the key storage have a key for recipient
+func (c Client) HasKey(recipient string) bool {
+	key, err := c.proxy.GetRecipient(recipient)
+	return err == nil && key != nil
+}
+
+type requestIndex [block.MessageIDLength]byte
+
 func (c Client) eventHandler() {
+	keyRequests := make(map[requestIndex]kaetzchenKeyRequest)
+
 	for {
-		ev := <-c.eventSink
-		switch ev.(type) {
-		case *event.MessageReceivedEvent:
-			c.recvCh <- true
-		case *event.ConnectionStatusEvent:
-			conEv := ev.(*event.ConnectionStatusEvent)
-			c.connectionCh <- conEv.IsConnected
-		default:
-			continue
+		select {
+		case ev := <-c.eventSink:
+			switch event := ev.(type) {
+			case *event.MessageReceivedEvent:
+				c.recvCh <- true
+			case *event.ConnectionStatusEvent:
+				c.connectionCh <- event.IsConnected
+			case *event.KaetzchenReplyEvent:
+				var index requestIndex
+				copy(index[:], event.MessageID[:block.MessageIDLength])
+				request, ok := keyRequests[index]
+				if !ok {
+					continue
+				}
+
+				if event.Err != nil {
+					request.ch <- event.Err
+					continue
+				}
+
+				_, key, err := c.proxy.ParseKeyQueryResponse(event.Payload)
+				if err != nil {
+					request.ch <- err
+				} else {
+					request.ch <- c.proxy.SetRecipient(request.recipient, key)
+				}
+				delete(keyRequests, index)
+			default:
+				continue
+			}
+
+		case request := <-c.kaetzchenCh:
+			var index requestIndex
+			copy(index[:], request.msgID[:block.MessageIDLength])
+			keyRequests[index] = request
 		}
 	}
 }
